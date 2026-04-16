@@ -52,7 +52,6 @@ async def github_callback(code: str = Query(...), response: Response = None):
         return RedirectResponse(url=f"{settings.FRONTEND_URL}?error=oauth_failed")
 
     async with httpx.AsyncClient() as client:
-    async with httpx.AsyncClient() as client:
         user_resp = await client.get(
             GITHUB_USER_URL,
             headers={
