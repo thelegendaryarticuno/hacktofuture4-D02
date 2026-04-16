@@ -133,8 +133,28 @@ async def get_repository_dashboard(
     if ws is None or ws.owner_id != user.id:
         raise HTTPException(status_code=404, detail="Workspace not found")
 
+    if not ws.github_installation_id or not ws.github_repo_full_name:
+        return {
+            "workspace": serialize_workspace(ws),
+            "health": {
+                "status": "unknown",
+                "latest_conclusion": None,
+                "last_event_at": None,
+                "healthy_count": 0,
+                "degraded_count": 0,
+                "failing_count": 0,
+                "total_events": 0,
+            },
+            "monitor_logs": [],
+            "errors": [],
+            "diagnosis_reports": [],
+        }
+
     runs = (
-        await PipelineRun.find(PipelineRun.workspace_id == ws.id)
+        await PipelineRun.find(
+            PipelineRun.workspace_id == ws.id,
+            PipelineRun.repository_full_name == ws.github_repo_full_name
+        )
         .sort(-PipelineRun.updated_at)
         .limit(50)
         .to_list()

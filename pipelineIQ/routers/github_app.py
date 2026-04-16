@@ -186,6 +186,15 @@ async def github_webhook(request: Request):
     if workspace is None:
         raise HTTPException(status_code=404, detail="Workspace not found for installation")
 
+    if event_type in ("installation", "installation_repositories", "installation_target"):
+        return {
+            "received": True,
+            "event_type": event_type,
+            "delivery_id": delivery_id,
+            "workspace_id": str(workspace.id),
+            "ignored": "This event type is not a CI pipeline event."
+        }
+
     pipeline_run = await pipeline_runtime.queue_event(
         workspace=workspace,
         event_type=event_type,

@@ -34,10 +34,17 @@ export default function WorkspacePage() {
 
   useEffect(() => {
     fetchDashboard();
+    
+    // Auto-refresh when the user returns to this tab (e.g. after installing the app in a new tab)
+    const onFocus = () => {
+      fetchDashboard();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [id]);
 
   const beginInstallFlow = () => {
-    window.location.href = `/api/workspaces/${id}/github/install`;
+    window.open(`/api/workspaces/${id}/github/install`, '_blank');
   };
 
   const disconnectInstallation = async () => {
@@ -206,30 +213,32 @@ export default function WorkspacePage() {
           </div>
         </article>
 
-        <article className="workspace-panel">
-          <div className="panel-heading">
-            <h2>Pipeline health summary</h2>
-            <p>This is the repository-level view built from Kafka events, monitor summaries, and diagnosis outcomes.</p>
-          </div>
-          <div className="health-grid">
-            <div className="health-card">
-              <span>Current status</span>
-              <strong>{health?.status || "unknown"}</strong>
+        {workspace.connected && (
+          <article className="workspace-panel">
+            <div className="panel-heading">
+              <h2>Pipeline health summary</h2>
+              <p>This is the repository-level view built from Kafka events, monitor summaries, and diagnosis outcomes.</p>
             </div>
-            <div className="health-card">
-              <span>Total events</span>
-              <strong>{health?.total_events ?? 0}</strong>
+            <div className="health-grid">
+              <div className="health-card">
+                <span>Current status</span>
+                <strong>{health?.status || "unknown"}</strong>
+              </div>
+              <div className="health-card">
+                <span>Total events</span>
+                <strong>{health?.total_events ?? 0}</strong>
+              </div>
+              <div className="health-card">
+                <span>Failing runs</span>
+                <strong>{health?.failing_count ?? 0}</strong>
+              </div>
+              <div className="health-card">
+                <span>Healthy runs</span>
+                <strong>{health?.healthy_count ?? 0}</strong>
+              </div>
             </div>
-            <div className="health-card">
-              <span>Failing runs</span>
-              <strong>{health?.failing_count ?? 0}</strong>
-            </div>
-            <div className="health-card">
-              <span>Healthy runs</span>
-              <strong>{health?.healthy_count ?? 0}</strong>
-            </div>
-          </div>
-        </article>
+          </article>
+        )}
       </div>
     );
   }, [activeTab, dashboard, diagnosisReports, errors, health, monitorLogs, workspace]);
@@ -300,42 +309,46 @@ export default function WorkspacePage() {
         </div>
       ) : null}
 
-      <section className="dashboard-kpis">
-        <article className="kpi-card">
-          <span>Deployment health</span>
-          <strong>{health?.status || "unknown"}</strong>
-          <p>{health?.latest_conclusion ? `Latest conclusion: ${health.latest_conclusion}` : "No deployments observed yet."}</p>
-        </article>
-        <article className="kpi-card">
-          <span>Monitor logs</span>
-          <strong>{monitorLogs.length}</strong>
-          <p>Kafka topic `{workspace.connected ? "pipeline-events" : "pending"}` feeds this monitor history.</p>
-        </article>
-        <article className="kpi-card">
-          <span>Error runs</span>
-          <strong>{errors.length}</strong>
-          <p>Failures and degraded runs appear in the error tab for quick triage.</p>
-        </article>
-        <article className="kpi-card">
-          <span>Diagnosis reports</span>
-          <strong>{diagnosisReports.length}</strong>
-          <p>Completed diagnosis outputs remain visible here after the agent stops.</p>
-        </article>
-      </section>
+      {workspace.connected && (
+        <section className="dashboard-kpis">
+          <article className="kpi-card">
+            <span>Deployment health</span>
+            <strong>{health?.status || "unknown"}</strong>
+            <p>{health?.latest_conclusion ? `Latest conclusion: ${health.latest_conclusion}` : "No deployments observed yet."}</p>
+          </article>
+          <article className="kpi-card">
+            <span>Monitor logs</span>
+            <strong>{monitorLogs.length}</strong>
+            <p>Kafka topic `{workspace.connected ? "pipeline-events" : "pending"}` feeds this monitor history.</p>
+          </article>
+          <article className="kpi-card">
+            <span>Error runs</span>
+            <strong>{errors.length}</strong>
+            <p>Failures and degraded runs appear in the error tab for quick triage.</p>
+          </article>
+          <article className="kpi-card">
+            <span>Diagnosis reports</span>
+            <strong>{diagnosisReports.length}</strong>
+            <p>Completed diagnosis outputs remain visible here after the agent stops.</p>
+          </article>
+        </section>
+      )}
 
       <section className="workspace-panel">
-        <div className="dashboard-tabs">
-          {TABS.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              className={`dashboard-tab ${activeTab === tab ? "active" : ""}`}
-              onClick={() => setActiveTab(tab)}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
+        {workspace.connected && (
+          <div className="dashboard-tabs">
+            {TABS.map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                className={`dashboard-tab ${activeTab === tab ? "active" : ""}`}
+                onClick={() => setActiveTab(tab)}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="tab-panel">{activeTabContent}</div>
       </section>
     </div>
