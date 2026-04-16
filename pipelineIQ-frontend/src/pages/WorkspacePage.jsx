@@ -4,10 +4,55 @@ import api from "../api/client";
 
 const TABS = ["overview", "monitor", "errors", "diagnosis"];
 
+function normalizeList(value) {
+  if (Array.isArray(value)) {
+    return value.filter((entry) => typeof entry === "string" && entry.trim());
+  }
+  return [];
+}
+
+function normalizeMonitorReport(item) {
+  const report = item?.monitor_report_json || {};
+  return {
+    workflowId: report.workflow_id || String(item?.run_id || ""),
+    status: report.status || "RUNNING",
+    startTime: report.start_time || "",
+    lastUpdated: report.last_updated || item?.updated_at || "",
+    endTime: report.end_time || "",
+    duration: report.duration || "",
+    currentStep: report.current_step || "",
+    stepsCompleted: normalizeList(report.steps_completed),
+    stepsPending: normalizeList(report.steps_pending),
+    error: {
+      exists: Boolean(report?.error?.exists),
+      type: report?.error?.type || "",
+      message: report?.error?.message || "",
+    },
+  };
+}
+
+function normalizeDiagnosisReport(item) {
+  const report = item?.diagnosis_report_json || {};
+  return {
+    workflowId: report.workflow_id || String(item?.run_id || ""),
+    errorType: report.error_type || "Unknown",
+    rootCause: report.root_cause || "No root cause captured.",
+    triggerChange: report.trigger_change || "No trigger change identified.",
+    beforeState: report.before_state || "No baseline details available.",
+    afterState: report.after_state || "No failure-state details available.",
+    impact: report.impact || "Impact not provided.",
+    suggestedFix: report.suggested_fix || "No suggested fix provided.",
+    severity: report.severity || "MEDIUM",
+    diagnosisTime: report.diagnosis_time || item?.updated_at || "",
+  };
+}
+
 function StatusPill({ value }) {
   const normalized = (value || "unknown").toLowerCase();
   return <span className={`status-pill ${normalized}`}>{value || "unknown"}</span>;
 }
+
+const MONITOR_STEPS = ["build", "test", "deploy"];
 
 export default function WorkspacePage() {
   const { id } = useParams();
@@ -34,13 +79,20 @@ export default function WorkspacePage() {
 
   useEffect(() => {
     fetchDashboard();
-    
-    // Auto-refresh when the user returns to this tab (e.g. after installing the app in a new tab)
+
     const onFocus = () => {
       fetchDashboard();
     };
+
+    const intervalId = window.setInterval(() => {
+      fetchDashboard();
+    }, 8000);
+
     window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", onFocus);
+    };
   }, [id]);
 
   const beginInstallFlow = () => {
@@ -73,7 +125,9 @@ export default function WorkspacePage() {
     if (activeTab === "monitor") {
       return monitorLogs.length ? (
         <div className="dashboard-feed">
-          {monitorLogs.map((item) => (
+          {monitorLogs.map((item) => {
+            const monitorReport = normalizeMonitorReport(item);
+            return (
             <article key={item.id} className="feed-card">
               <div className="feed-card-top">
                 <div>
@@ -82,11 +136,65 @@ export default function WorkspacePage() {
                     {item.branch || "unknown branch"} · {item.triggered_by || "unknown trigger"}
                   </p>
                 </div>
-                <StatusPill value={item.health_status} />
+                <StatusPill value={monitorReport.status} />
               </div>
-              <p className="feed-summary">
-                {item.monitor_summary || "Monitor agent has not produced a summary yet."}
-              </p>
+
+              <div className="report-kv-grid">
+                <div className="report-kv-card">
+                  <span>Workflow ID</span>
+                  <strong>{monitorReport.workflowId || "n/a"}</strong>
+                </div>
+                <div className="report-kv-card">
+                  <span>Current step</span>
+                  <strong>{monitorReport.currentStep || "none"}</strong>
+                </div>
+                <div className="report-kv-card">
+                  <span>Last updated</span>
+                  <strong>{monitorReport.lastUpdated ? new Date(monitorReport.lastUpdated).toLocaleTimeString() : "n/a"}</strong>
+                </div>
+              </div>
+
+              <div className="step-timeline">
+                {MONITOR_STEPS.map((step) => {
+                  const isCompleted = monitorReport.stepsCompleted.includes(step);
+                  const isCurrent = monitorReport.currentStep === step && monitorReport.status === "RUNNING";
+                  const isPending = monitorReport.stepsPending.includes(step);
+                  return (
+                    <div
+                      key={`${item.id}-${step}`}
+                      className={`step-node ${isCompleted ? "completed" : ""} ${isCurrent ? "current" : ""} ${isPending ? "pending" : ""}`}
+                    >
+                      <span>{step}</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {monitorReport.status !== "RUNNING" ? (
+                <div className="report-kv-grid">
+                  <div className="report-kv-card">
+                    <span>Started</span>
+                    <strong>{monitorReport.startTime ? new Date(monitorReport.startTime).toLocaleString() : "n/a"}</strong>
+                  </div>
+                  <div className="report-kv-card">
+                    <span>Completed</span>
+                    <strong>{monitorReport.endTime ? new Date(monitorReport.endTime).toLocaleString() : "n/a"}</strong>
+                  </div>
+                  <div className="report-kv-card">
+                    <span>Duration</span>
+                    <strong>{monitorReport.duration || "n/a"}</strong>
+                  </div>
+                </div>
+              ) : null}
+
+              {monitorReport.error.exists ? (
+                <section className="report-section full">
+                  <h4>Error</h4>
+                  <p><strong>{monitorReport.error.type || "Failure"}</strong></p>
+                  <p>{monitorReport.error.message || "No error message extracted."}</p>
+                </section>
+              ) : null}
+
               {item.monitor_logs_excerpt?.length ? (
                 <pre className="log-preview">{item.monitor_logs_excerpt.join("\n")}</pre>
               ) : null}
@@ -95,7 +203,8 @@ export default function WorkspacePage() {
                 <span>{new Date(item.updated_at).toLocaleString()}</span>
               </div>
             </article>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="empty-inline">No monitor activity yet for this repository.</div>
@@ -135,7 +244,9 @@ export default function WorkspacePage() {
     if (activeTab === "diagnosis") {
       return diagnosisReports.length ? (
         <div className="dashboard-feed">
-          {diagnosisReports.map((item) => (
+          {diagnosisReports.map((item) => {
+            const diagnosisReport = normalizeDiagnosisReport(item);
+            return (
             <article key={item.id} className="feed-card diagnosis">
               <div className="feed-card-top">
                 <div>
@@ -146,13 +257,53 @@ export default function WorkspacePage() {
                 </div>
                 <StatusPill value={item.diagnosis_status} />
               </div>
-              <div className="report-markdown">{item.diagnosis_report}</div>
+
+              <div className="diagnosis-facts">
+                <span className="diag-chip">Conclusion: {item.conclusion || "unknown"}</span>
+                <span className="diag-chip">Error Type: {diagnosisReport.errorType}</span>
+                <span className="diag-chip">Severity: {diagnosisReport.severity}</span>
+                <span className="diag-chip">Generated: {diagnosisReport.diagnosisTime ? new Date(diagnosisReport.diagnosisTime).toLocaleString() : "n/a"}</span>
+              </div>
+
+              <section className="report-section full">
+                <h4>Root Cause</h4>
+                <p>{diagnosisReport.rootCause}</p>
+              </section>
+
+              <section className="report-section full">
+                <h4>Trigger Change</h4>
+                <p>{diagnosisReport.triggerChange}</p>
+              </section>
+
+              <div className="diagnosis-report-grid">
+                <section className="report-section">
+                  <h4>Before State</h4>
+                  <p>{diagnosisReport.beforeState}</p>
+                </section>
+
+                <section className="report-section">
+                  <h4>After State</h4>
+                  <p>{diagnosisReport.afterState}</p>
+                </section>
+
+                <section className="report-section full">
+                  <h4>Impact</h4>
+                  <p>{diagnosisReport.impact}</p>
+                </section>
+
+                <section className="report-section full">
+                  <h4>Suggested Fix</h4>
+                  <p>{diagnosisReport.suggestedFix}</p>
+                </section>
+              </div>
+
               <div className="feed-meta">
                 <span>Diagnosis agent: {item.diagnosis_provider || "pending"} / {item.diagnosis_model || "pending"}</span>
                 <span>{new Date(item.updated_at).toLocaleString()}</span>
               </div>
             </article>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="empty-inline">Diagnosis reports will appear here after the diagnosis agent finishes a failing or degraded run.</div>
@@ -285,6 +436,11 @@ export default function WorkspacePage() {
           <button className="btn-primary" onClick={beginInstallFlow}>
             {workspace.connected ? "Reconfigure Repository" : "Add Repository"}
           </button>
+          {workspace.connected ? (
+            <Link to="/dashboard" className="btn-secondary">
+              View Dashboard
+            </Link>
+          ) : null}
           {workspace.connected ? (
             <button
               className="btn-secondary"

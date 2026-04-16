@@ -136,6 +136,46 @@ async def download_workflow_logs(
     return "\n\n".join(chunks)
 
 
+async def fetch_compare_diff(
+    installation_id: int,
+    repository_full_name: str,
+    base_sha: str | None,
+    head_sha: str | None,
+) -> str:
+    if not base_sha or not head_sha:
+        return "Git diff unavailable: missing base or head SHA."
+
+    installation_token = await get_installation_access_token(installation_id)
+    owner, repo = repository_full_name.split("/", 1)
+    compare = await _github_request(
+        "GET",
+        f"/repos/{owner}/{repo}/compare/{base_sha}...{head_sha}",
+        token=installation_token,
+    )
+
+    files = compare.get("files") or []
+    if not files:
+        return "No file changes found between base and head."
+
+    chunks: list[str] = []
+    for file_item in files[:20]:
+        filename = file_item.get("filename", "unknown")
+        status = file_item.get("status", "modified")
+        additions = file_item.get("additions", 0)
+        deletions = file_item.get("deletions", 0)
+        patch = (file_item.get("patch") or "").strip()
+        if len(patch) > 2000:
+            patch = patch[:2000] + "\n...truncated..."
+
+        chunks.append(
+            f"File: {filename}\n"
+            f"Status: {status} (+{additions}/-{deletions})\n"
+            f"Patch:\n{patch or 'Patch unavailable.'}"
+        )
+
+    return "\n\n".join(chunks)
+
+
 def verify_webhook_signature(body: bytes, signature_header: str | None) -> bool:
     if not signature_header:
         return False

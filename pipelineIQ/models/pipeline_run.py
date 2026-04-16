@@ -13,6 +13,7 @@ class PipelineRun(Document):
     event_type: str
     action: Optional[str] = None
     run_id: Optional[int] = None
+    workflow_status: Optional[str] = None
     workflow_name: Optional[str] = None
     workflow_url: Optional[str] = None
     branch: Optional[str] = None
@@ -24,8 +25,10 @@ class PipelineRun(Document):
     monitor_status: str = "pending"
     diagnosis_status: str = "pending"
     monitor_summary: Optional[str] = None
+    monitor_report_json: dict[str, Any] = Field(default_factory=dict)
     monitor_logs_excerpt: list[str] = Field(default_factory=list)
     diagnosis_report: Optional[str] = None
+    diagnosis_report_json: dict[str, Any] = Field(default_factory=dict)
     diagnosis_error: Optional[str] = None
     error_summary: Optional[str] = None
     diagnosis_provider: Optional[str] = None

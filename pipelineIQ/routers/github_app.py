@@ -16,7 +16,7 @@ from services.github_app import (
     list_installation_repositories,
     verify_webhook_signature,
 )
-from services.pipeline_runtime import pipeline_runtime
+from services.pipeline_runtime import pipeline_runtime, should_process_pipeline_event
 
 from config import settings
 
@@ -193,6 +193,15 @@ async def github_webhook(request: Request):
             "delivery_id": delivery_id,
             "workspace_id": str(workspace.id),
             "ignored": "This event type is not a CI pipeline event."
+        }
+
+    if not should_process_pipeline_event(event_type, payload):
+        return {
+            "received": True,
+            "event_type": event_type,
+            "delivery_id": delivery_id,
+            "workspace_id": str(workspace.id),
+            "ignored": "Only workflow_run lifecycle events are tracked for monitor and diagnosis.",
         }
 
     pipeline_run = await pipeline_runtime.queue_event(

@@ -1036,6 +1036,16 @@ input, textarea {
   color: #22c55e;
 }
 
+.status-pill.running {
+  background: rgba(245, 158, 11, 0.14);
+  color: #f59e0b;
+}
+
+.status-pill.failure {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
 .status-pill.degraded,
 .status-pill.cancelled,
 .status-pill.skipped {
@@ -1085,6 +1095,127 @@ input, textarea {
   white-space: pre-wrap;
   line-height: 1.55;
   overflow-x: auto;
+}
+
+.diagnosis-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 14px;
+}
+
+.diag-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(59, 130, 246, 0.24);
+  background: rgba(59, 130, 246, 0.08);
+  color: #1d4ed8;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.report-kv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.report-kv-card {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: rgba(2, 6, 23, 0.06);
+  padding: 10px;
+}
+
+.report-kv-card span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  margin-bottom: 6px;
+}
+
+.report-kv-card strong {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  text-transform: capitalize;
+}
+
+.step-timeline {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.step-node {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  text-align: center;
+  color: var(--text-secondary);
+  background: rgba(2, 6, 23, 0.04);
+  text-transform: capitalize;
+  font-size: 0.82rem;
+}
+
+.step-node.completed {
+  border-color: rgba(34, 197, 94, 0.25);
+  background: rgba(34, 197, 94, 0.12);
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.step-node.current {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.14);
+  color: #d97706;
+  font-weight: 700;
+}
+
+.step-node.pending {
+  opacity: 0.85;
+}
+
+.diagnosis-report-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.report-section {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  background: rgba(2, 6, 23, 0.06);
+}
+
+.report-section.full {
+  grid-column: 1 / -1;
+}
+
+.report-section h4 {
+  font-size: 0.88rem;
+  letter-spacing: 0.01em;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+.report-section ul {
+  margin: 0;
+  padding-left: 16px;
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.report-section p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+  line-height: 1.5;
 }
 
 .inline-error {

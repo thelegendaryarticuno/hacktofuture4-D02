@@ -69,6 +69,7 @@ def serialize_pipeline_run(run: PipelineRun) -> dict:
         "run_id": run.run_id,
         "workflow_name": run.workflow_name,
         "workflow_url": run.workflow_url,
+        "workflow_status": run.workflow_status,
         "branch": run.branch,
         "commit_sha": run.commit_sha,
         "triggered_by": run.triggered_by,
@@ -78,8 +79,10 @@ def serialize_pipeline_run(run: PipelineRun) -> dict:
         "monitor_status": run.monitor_status,
         "diagnosis_status": run.diagnosis_status,
         "monitor_summary": run.monitor_summary,
+        "monitor_report_json": run.monitor_report_json,
         "monitor_logs_excerpt": run.monitor_logs_excerpt,
         "diagnosis_report": run.diagnosis_report,
+        "diagnosis_report_json": run.diagnosis_report_json,
         "diagnosis_error": run.diagnosis_error,
         "error_summary": run.error_summary,
         "diagnosis_provider": run.diagnosis_provider,
@@ -153,7 +156,8 @@ async def get_repository_dashboard(
     runs = (
         await PipelineRun.find(
             PipelineRun.workspace_id == ws.id,
-            PipelineRun.repository_full_name == ws.github_repo_full_name
+            PipelineRun.repository_full_name == ws.github_repo_full_name,
+            PipelineRun.event_type == "workflow_run",
         )
         .sort(-PipelineRun.updated_at)
         .limit(50)
