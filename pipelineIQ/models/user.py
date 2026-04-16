@@ -6,7 +6,15 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from beanie import Document
-from pydantic import Field
+from pydantic import BaseModel, Field
+
+
+class GitHubOrganization(BaseModel):
+    id: int
+    login: str
+    avatar_url: Optional[str] = None
+    description: Optional[str] = None
+    url: Optional[str] = None
 
 
 class User(Document):
@@ -18,6 +26,7 @@ class User(Document):
     email: Optional[str] = None
     avatar_url: Optional[str] = None
     github_access_token: str  # stored server-side only, never exposed to frontend
+    organizations: list[GitHubOrganization] = Field(default_factory=list)
     last_login: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     is_active: bool = True

@@ -1,8 +1,11 @@
 import { useAuth } from "../context/AuthContext";
-import { Navigate } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
+import ThemeToggle from "../components/ThemeToggle";
 
 export default function LoginPage() {
   const { user, loading, login } = useAuth();
+  const [searchParams] = useSearchParams();
+  const error = searchParams.get("error");
 
   if (loading) {
     return (
@@ -16,6 +19,10 @@ export default function LoginPage() {
 
   return (
     <div className="login-page">
+      <div className="login-theme-toggle">
+        <ThemeToggle />
+      </div>
+
       {/* Animated background orbs */}
       <div className="bg-orb bg-orb-1" />
       <div className="bg-orb bg-orb-2" />
@@ -37,8 +44,14 @@ export default function LoginPage() {
         </div>
         <h1 className="login-title">PipelineIQ</h1>
         <p className="login-subtitle">
-          Connect your repositories. Manage your CI/CD pipelines. Ship faster.
+          Sign in with GitHub, pick your organization context, then connect a repository through your GitHub App installation.
         </p>
+
+        {error && (
+          <div className="notice-banner error">
+            GitHub sign-in could not be completed. Please try again.
+          </div>
+        )}
 
         <button className="btn-github" onClick={login} id="github-login-btn">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
@@ -48,9 +61,9 @@ export default function LoginPage() {
         </button>
 
         <p className="login-footer">
-          Secure authentication via GitHub OAuth2.
+          Secure authentication via GitHub OAuth.
           <br />
-          Your data stays private.
+          Repository access is granted separately through your GitHub App.
         </p>
       </div>
     </div>

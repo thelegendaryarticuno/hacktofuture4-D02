@@ -5,8 +5,8 @@ from uvicorn import run
 from config import settings
 from database import connect_db, disconnect_db
 from routers.auth import router as auth_router
+from routers.github_app import router as github_app_router
 from routers.workspaces import router as workspace_router
-from routers.repositories import router as repo_router
 
 # ── Lifespan: DB connect / disconnect ─────────────────────────────
 @asynccontextmanager
@@ -35,7 +35,7 @@ app.add_middleware(
 # ── Routers ───────────────────────────────────────────────────────
 app.include_router(auth_router)
 app.include_router(workspace_router)
-app.include_router(repo_router)
+app.include_router(github_app_router)
 
 
 @app.get("/")

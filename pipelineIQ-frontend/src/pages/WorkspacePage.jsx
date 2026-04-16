@@ -1,22 +1,28 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import api from "../api/client";
-import RepoCard from "../components/RepoCard";
-import Modal from "../components/Modal";
 
 export default function WorkspacePage() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const [workspace, setWorkspace] = useState(null);
+  const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showConnect, setShowConnect] = useState(false);
-  const [ghRepos, setGhRepos] = useState([]);
-  const [loadingGh, setLoadingGh] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [disconnecting, setDisconnecting] = useState(false);
+
+  const installationState = searchParams.get("installation");
+  const setupAction = searchParams.get("setup_action");
 
   const fetchWorkspace = async () => {
     try {
       const { data } = await api.get(`/workspaces/${id}`);
       setWorkspace(data);
+      if (data.github_installation_id) {
+        const eventsResponse = await api.get(`/workspaces/${id}/github/events`);
+        setEvents(eventsResponse.data);
+      } else {
+        setEvents([]);
+      }
     } catch (err) {
       console.error("Failed to load workspace", err);
     } finally {
@@ -28,62 +34,23 @@ export default function WorkspacePage() {
     fetchWorkspace();
   }, [id]);
 
-  const openConnectModal = async () => {
-    setShowConnect(true);
-    setLoadingGh(true);
+  const beginInstallFlow = () => {
+    window.location.href = `/api/workspaces/${id}/github/install`;
+  };
+
+  const disconnectInstallation = async () => {
+    if (!confirm("Disconnect the GitHub App from this workspace?")) return;
+
+    setDisconnecting(true);
     try {
-      const { data } = await api.get("/repositories/github", {
-        params: { per_page: 100 },
-      });
-      setGhRepos(data);
+      await api.delete(`/workspaces/${id}/github/installation`);
+      await fetchWorkspace();
     } catch (err) {
-      console.error("Failed to load GitHub repos", err);
+      console.error("Failed to disconnect GitHub App", err);
     } finally {
-      setLoadingGh(false);
+      setDisconnecting(false);
     }
   };
-
-  const connectRepo = async (repo) => {
-    try {
-      await api.post(`/workspaces/${id}/repos`, {
-        github_repo_id: repo.github_repo_id,
-        full_name: repo.full_name,
-        name: repo.name,
-        private: repo.private,
-        html_url: repo.html_url,
-        default_branch: repo.default_branch,
-      });
-      setShowConnect(false);
-      await fetchWorkspace();
-    } catch (err) {
-      if (err.response?.status === 409) {
-        alert("Repository is already connected to this workspace.");
-      } else {
-        console.error("Failed to connect repo", err);
-      }
-    }
-  };
-
-  const disconnectRepo = async (repoId) => {
-    if (!confirm("Disconnect this repository?")) return;
-    try {
-      await api.delete(`/workspaces/${id}/repos/${repoId}`);
-      await fetchWorkspace();
-    } catch (err) {
-      console.error("Failed to disconnect repo", err);
-    }
-  };
-
-  const connectedIds = new Set(
-    workspace?.repositories?.map((r) => r.github_repo_id) || []
-  );
-
-  const filteredRepos = ghRepos.filter(
-    (r) =>
-      !connectedIds.has(r.github_repo_id) &&
-      (r.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.name.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
 
   if (loading) {
     return (
@@ -117,96 +84,149 @@ export default function WorkspacePage() {
             Dashboard
           </Link>
           <h1>{workspace.name}</h1>
-          {workspace.description && (
-            <p className="workspace-description">{workspace.description}</p>
+          <p className="workspace-description">
+            {workspace.description ||
+              "Workspace for GitHub App installation, webhook intake, and downstream agent processing."}
+          </p>
+        </div>
+        <div className="workspace-actions">
+          <button className="btn-primary" onClick={beginInstallFlow}>
+            {workspace.connected ? "Reconfigure Repository" : "Add Repository"}
+          </button>
+          {workspace.connected && (
+            <button
+              className="btn-secondary"
+              onClick={disconnectInstallation}
+              disabled={disconnecting}
+            >
+              {disconnecting ? "Disconnecting…" : "Disconnect"}
+            </button>
           )}
         </div>
-        <button
-          className="btn-primary"
-          onClick={openConnectModal}
-          id="connect-repo-btn"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          Connect Repository
-        </button>
       </header>
 
-      {workspace.repositories?.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-icon">
-            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" opacity="0.4">
-              <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
-            </svg>
-          </div>
-          <h2>No repositories connected</h2>
-          <p>Connect your GitHub repositories to this workspace.</p>
-          <button className="btn-primary" onClick={openConnectModal}>
-            Connect Repository
-          </button>
-        </div>
-      ) : (
-        <div className="repo-list">
-          {workspace.repositories.map((repo) => (
-            <RepoCard
-              key={repo.id}
-              repo={repo}
-              onDisconnect={disconnectRepo}
-            />
-          ))}
+      {installationState === "success" && (
+        <div className="notice-banner success">
+          GitHub App installation {setupAction === "update" ? "updated" : "completed"} for this workspace.
         </div>
       )}
 
-      {/* Connect Repository Modal */}
-      <Modal
-        isOpen={showConnect}
-        onClose={() => {
-          setShowConnect(false);
-          setSearchTerm("");
-        }}
-        title="Connect a Repository"
-      >
-        <div className="connect-modal">
-          <input
-            type="text"
-            className="search-input"
-            placeholder="Search repositories…"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            autoFocus
-          />
+      {installationState && installationState !== "success" && (
+        <div className="notice-banner warning">
+          GitHub App setup did not finish cleanly. Try the install flow again from this workspace.
+        </div>
+      )}
 
-          {loadingGh ? (
-            <div className="loading-screen mini">
-              <div className="loader" />
+      <section className="workspace-panel-grid">
+        <article className="workspace-panel">
+          <div className="panel-heading">
+            <h2>Repository connection</h2>
+            <p>This connection is granted through the GitHub App installation, not the user OAuth token.</p>
+          </div>
+
+          {workspace.connected ? (
+            <div className="connection-summary">
+              <div className="summary-item">
+                <span>Repository</span>
+                <strong>{workspace.github_repo_full_name}</strong>
+              </div>
+              <div className="summary-item">
+                <span>Default branch</span>
+                <strong>{workspace.github_default_branch || "main"}</strong>
+              </div>
+              <div className="summary-item">
+                <span>Installation ID</span>
+                <strong>{workspace.github_installation_id}</strong>
+              </div>
+              <div className="summary-item">
+                <span>GitHub account</span>
+                <strong>
+                  {workspace.github_account_login || "Unknown"}{" "}
+                  {workspace.github_account_type ? `(${workspace.github_account_type})` : ""}
+                </strong>
+              </div>
+              <div className="summary-item">
+                <span>Visibility</span>
+                <strong>{workspace.github_repo_private ? "Private" : "Public"}</strong>
+              </div>
+              <div className="summary-item">
+                <span>Connected at</span>
+                <strong>
+                  {workspace.connected_at
+                    ? new Date(workspace.connected_at).toLocaleString()
+                    : "Pending"}
+                </strong>
+              </div>
+              {workspace.github_repo_html_url && (
+                <a
+                  className="repo-inline-link"
+                  href={workspace.github_repo_html_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open repository on GitHub
+                </a>
+              )}
             </div>
-          ) : filteredRepos.length === 0 ? (
-            <p className="no-results">No repositories found.</p>
           ) : (
-            <div className="connect-list">
-              {filteredRepos.map((repo) => (
-                <div key={repo.github_repo_id} className="connect-item">
-                  <div className="connect-item-info">
-                    <span className="connect-item-name">{repo.full_name}</span>
-                    <span className="connect-item-meta">
-                      {repo.private ? "Private" : "Public"}
-                      {repo.language ? ` · ${repo.language}` : ""}
-                    </span>
-                  </div>
-                  <button
-                    className="btn-connect"
-                    onClick={() => connectRepo(repo)}
-                  >
-                    Connect
-                  </button>
-                </div>
-              ))}
+            <div className="empty-inline">
+              No repository is connected yet. Use the button above to open the GitHub App installation flow and grant access to the repository you want this workspace to monitor.
             </div>
           )}
+        </article>
+
+        <article className="workspace-panel">
+          <div className="panel-heading">
+            <h2>Risk profile</h2>
+            <p>These thresholds drive how your agents can escalate, request approval, or attempt safe fixes.</p>
+          </div>
+
+          <div className="risk-grid">
+            <div className="risk-card">
+              <span>Production branch</span>
+              <strong>{workspace.risk_profile.production_branch}</strong>
+            </div>
+            <div className="risk-card">
+              <span>Require approval above</span>
+              <strong>{workspace.risk_profile.require_approval_above}</strong>
+            </div>
+            <div className="risk-card">
+              <span>Auto-fix below</span>
+              <strong>{workspace.risk_profile.auto_fix_below}</strong>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section className="workspace-panel">
+        <div className="panel-heading">
+          <h2>Webhook monitor</h2>
+          <p>Once the GitHub App is installed, GitHub sends events like `workflow_run`, `workflow_job`, `push`, and `check_run` directly to the backend webhook endpoint.</p>
         </div>
-      </Modal>
+
+        {!workspace.connected ? (
+          <div className="empty-inline">
+            Install the GitHub App first. After that, webhook deliveries will start appearing here for your future diagnosis and monitor agents.
+          </div>
+        ) : events.length === 0 ? (
+          <div className="empty-inline">
+            The GitHub App is connected. Webhook deliveries have not arrived yet, or the repository has not produced new activity since installation.
+          </div>
+        ) : (
+          <div className="event-list">
+            {events.map((event) => (
+              <article key={event.delivery_id} className="event-card">
+                <div>
+                  <span className="event-type">{event.event_type}</span>
+                  {event.action && <span className="event-action">{event.action}</span>}
+                </div>
+                <p>{event.repository_full_name || workspace.github_repo_full_name}</p>
+                <time>{new Date(event.received_at).toLocaleString()}</time>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

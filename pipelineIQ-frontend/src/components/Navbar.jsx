@@ -1,5 +1,6 @@
 import { useAuth } from "../context/AuthContext";
 import { Link, useLocation } from "react-router-dom";
+import ThemeToggle from "./ThemeToggle";
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -35,6 +36,7 @@ export default function Navbar() {
         </div>
 
         <div className="navbar-user">
+          <ThemeToggle />
           <img
             src={user.avatar_url}
             alt={user.username}

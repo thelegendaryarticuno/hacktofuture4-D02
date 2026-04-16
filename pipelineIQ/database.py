@@ -9,6 +9,7 @@ from config import settings
 from models.user import User
 from models.workspace import Workspace
 from models.repository import Repository
+from models.webhook_event import WebhookEvent
 
 _client: AsyncIOMotorClient | None = None
 
@@ -19,7 +20,7 @@ async def connect_db() -> None:
     _client = AsyncIOMotorClient(settings.MONGODB_URI)
     await init_beanie(
         database=_client[settings.MONGODB_DB_NAME],
-        document_models=[User, Workspace, Repository],
+        document_models=[User, Workspace, Repository, WebhookEvent],
     )
 
 

@@ -24,9 +24,17 @@ class Settings(BaseSettings):
     GITHUB_CLIENT_ID: str
     GITHUB_CLIENT_SECRET: str
     GITHUB_REDIRECT_URI: str = "http://localhost:8000/api/auth/github/callback"
+    GITHUB_OAUTH_SCOPES: str = "read:user read:org"
+
+    # GitHub App
+    GITHUB_APP_ID: str
+    GITHUB_APP_SLUG: str
+    GITHUB_APP_PRIVATE_KEY: str
+    GITHUB_APP_WEBHOOK_SECRET: str
+    GITHUB_APP_INSTALL_URL: str | None = None
 
     # MongoDB
-    MONGODB_URI: str = "mongodb://localhost:27017"
+    MONGODB_URI: str
     MONGODB_DB_NAME: str = "pipelineiq"
 
     # JWT / Sessions
@@ -38,8 +46,18 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:5173"
 
     # Cookie
-    COOKIE_DOMAIN: str = "localhost"
+    COOKIE_DOMAIN: str | None = None
     COOKIE_SECURE: bool = False
+
+    @property
+    def github_app_install_url(self) -> str:
+        return self.GITHUB_APP_INSTALL_URL or (
+            f"https://github.com/apps/{self.GITHUB_APP_SLUG}/installations/new"
+        )
+
+    @property
+    def github_app_private_key_pem(self) -> str:
+        return self.GITHUB_APP_PRIVATE_KEY.replace("\\n", "\n")
 
 
 # Singleton — imported everywhere as `from config import settings`
