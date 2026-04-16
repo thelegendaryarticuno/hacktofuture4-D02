@@ -27,6 +27,8 @@ jobs:
 
       - name: Deploy Container
         run: |
+          set -euo pipefail
+
           BRANCH=${{ github.ref_name }}
 
           if [ "$BRANCH" == "staging" ]; then
@@ -35,6 +37,9 @@ jobs:
             PORT=5002
           elif [ "$BRANCH" == "production" ]; then
             PORT=5003
+          else
+            echo "error: Unsupported branch $BRANCH"
+            exit 1
           fi
 
           docker pull ${{ secrets.DOCKER_USERNAME }}/my-flask-app:$BRANCH
@@ -45,3 +50,41 @@ jobs:
             --name $BRANCH-app \
             -e ENVIRONMENT=$BRANCH \
             ${{ secrets.DOCKER_USERNAME }}/my-flask-app:$BRANCH
+
+          sleep 5
+
+          CONTAINER_STATE=$(docker inspect -f '{{.State.Status}}' "$BRANCH-app")
+          if [ "$CONTAINER_STATE" != "running" ]; then
+            echo "Container failed to start"
+            docker logs "$BRANCH-app" || true
+            echo "exit 1"
+            exit 1
+          fi
+
+          if ! curl -fsS "http://localhost:$PORT/health"; then
+            echo "Health check failed"
+            echo "failed"
+            docker logs "$BRANCH-app" || true
+            echo "exit 1"
+            exit 1
+          fi
+
+      - name: Runtime Validation
+        run: |
+          set -euo pipefail
+
+          BRANCH=${{ github.ref_name }}
+          if [ "$BRANCH" == "staging" ]; then
+            PORT=5001
+          elif [ "$BRANCH" == "pre-prod" ]; then
+            PORT=5002
+          else
+            PORT=5003
+          fi
+
+          if ! curl -fsS "http://localhost:$PORT/" >/dev/null; then
+            echo "Runtime validation failed"
+            echo "exception"
+            docker logs "$BRANCH-app" || true
+            exit 1
+          fi

@@ -57,6 +57,8 @@ class Settings(BaseSettings):
 
     FRONTEND_URL: str = "http://localhost:5173"
 
+    RESET_CI_CD_STATE_ON_STARTUP: bool = False
+
     COOKIE_DOMAIN: str | None = None
     COOKIE_SECURE: bool = False
 

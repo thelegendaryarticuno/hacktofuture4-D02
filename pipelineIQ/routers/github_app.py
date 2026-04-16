@@ -201,7 +201,7 @@ async def github_webhook(request: Request):
             "event_type": event_type,
             "delivery_id": delivery_id,
             "workspace_id": str(workspace.id),
-            "ignored": "Only workflow_run lifecycle events are tracked for monitor and diagnosis.",
+            "ignored": "Only completed workflow_run events are tracked.",
         }
 
     pipeline_run = await pipeline_runtime.queue_event(

@@ -8,10 +8,15 @@ from routers.auth import router as auth_router
 from routers.github_app import router as github_app_router
 from routers.workspaces import router as workspace_router
 from services.pipeline_runtime import pipeline_runtime
+from services.state_reset import clear_backend_state, clear_runtime_state
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if settings.RESET_CI_CD_STATE_ON_STARTUP:
+        await clear_backend_state()
+        clear_runtime_state()
     await connect_db()
+    clear_runtime_state()
     await pipeline_runtime.start()
     yield
     await pipeline_runtime.stop()
