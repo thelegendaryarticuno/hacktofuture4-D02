@@ -8,6 +8,7 @@ app = Flask(__name__)
 def health():
     return jsonify({"status": "ok"})
 
+#just a deployment check
 
 @app.get("/user")
 def user():
