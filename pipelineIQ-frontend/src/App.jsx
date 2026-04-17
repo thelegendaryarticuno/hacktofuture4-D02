@@ -7,6 +7,7 @@ import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import WorkspacePage from "./pages/WorkspacePage";
 import AutoFixReportPage from "./pages/AutoFixReportPage";
+import AutoFixFeedbackPage from "./pages/AutoFixFeedbackPage";
 
 function App() {
   return (
@@ -27,12 +28,13 @@ function App() {
             <Route
               path="/workspace/:id"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute>  
                   <WorkspacePage />
                 </ProtectedRoute>
               }
             />
             <Route path="/autofix/report" element={<AutoFixReportPage />} />
+            <Route path="/autofix/feedback" element={<AutoFixFeedbackPage />} />
           </Routes>
         </main>
       </AuthProvider>

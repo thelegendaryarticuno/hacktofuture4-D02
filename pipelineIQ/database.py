@@ -3,6 +3,7 @@ from beanie import init_beanie
 
 from config import settings
 from models.autofix_execution import AutoFixExecution
+from models.autofix_feedback import AutoFixFeedback
 from models.autofix_memory import AutoFixMemory
 from models.pipeline_run import PipelineRun
 from models.repository import Repository
@@ -25,6 +26,7 @@ async def connect_db() -> None:
             WebhookEvent,
             PipelineRun,
             AutoFixExecution,
+            AutoFixFeedback,
             AutoFixMemory,
         ],
     )

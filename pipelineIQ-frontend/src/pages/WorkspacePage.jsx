@@ -53,6 +53,8 @@ function normalizeDiagnosisReport(item) {
     autofixReportUrl: normalizeString(item?.autofix_report_url || ""),
     autofixPrUrl: normalizeString(item?.autofix_pr_url || ""),
     autofixError: normalizeString(item?.autofix_error || ""),
+    autofixFeedbackUrl: normalizeString(item?.autofix_feedback_url || ""),
+    autofixFeedbackStatus: normalizeString(item?.autofix_feedback_status || ""),
   };
 }
 
@@ -67,6 +69,8 @@ function normalizeAutofixReport(item) {
     summary: normalizeString(item?.fix_summary || ""),
     prUrl: normalizeString(item?.pr_url || ""),
     reportUrl: normalizeString(item?.report_url || ""),
+    feedbackUrl: normalizeString(item?.resolution_feedback_url || ""),
+    feedbackStatus: normalizeString(item?.resolution_feedback_status || ""),
     loopBlockedReason: normalizeString(item?.loop_blocked_reason || ""),
     updatedAt: normalizeString(item?.updated_at || ""),
   };
@@ -472,6 +476,8 @@ export default function WorkspacePage() {
                             {report.autofixError ? <p>{report.autofixError}</p> : null}
                             {report.autofixPrUrl ? <p><a href={report.autofixPrUrl} target="_blank" rel="noreferrer">Open PR</a></p> : null}
                             {report.autofixMode !== "auto_merge" && report.autofixReportUrl ? <p><a href={report.autofixReportUrl} target="_blank" rel="noreferrer">Open signed report</a></p> : null}
+                            {report.autofixMode !== "auto_merge" && report.autofixFeedbackUrl ? <p><a href={report.autofixFeedbackUrl} target="_blank" rel="noreferrer">Open feedback form</a></p> : null}
+                            {report.autofixFeedbackStatus ? <p>Feedback: {report.autofixFeedbackStatus}</p> : null}
                           </section>
                         ) : null}
 
@@ -523,6 +529,10 @@ export default function WorkspacePage() {
                     <span>Updated</span>
                     <strong>{report.updatedAt ? new Date(report.updatedAt).toLocaleString() : "n/a"}</strong>
                   </div>
+                  <div className="report-kv-card">
+                    <span>Feedback</span>
+                    <strong>{report.feedbackStatus || "not requested"}</strong>
+                  </div>
                 </div>
 
                 <section className="report-section full">
@@ -540,6 +550,9 @@ export default function WorkspacePage() {
                   ) : null}
                   {report.mode !== "auto_merge" && report.reportUrl ? (
                     <a className="btn-secondary" href={report.reportUrl} target="_blank" rel="noreferrer">Open Signed Report</a>
+                  ) : null}
+                  {report.mode !== "auto_merge" && report.feedbackUrl ? (
+                    <a className="btn-secondary" href={report.feedbackUrl} target="_blank" rel="noreferrer">Open Feedback Form</a>
                   ) : null}
                 </div>
               </article>

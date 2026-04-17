@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     AUTOFIX_AGENT_FALLBACK_PROVIDER: str = "groq"
     AUTOFIX_AGENT_FALLBACK_MODEL: str = "llama-3.3-70b-versatile"
     AUTOFIX_REPORT_EXPIRY_HOURS: int = 168
+    AUTOFIX_FEEDBACK_EXPIRY_HOURS: int = 720
 
     SLACK_ENABLED: bool = False
     SLACK_WEBHOOK_URL: str | None = None

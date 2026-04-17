@@ -28,6 +28,10 @@ class AutoFixExecution(Document):
     signed_report_token: Optional[str] = None
     report_feedback_status: Optional[str] = None
     report_feedback_note: Optional[str] = None
+    resolution_feedback_status: Optional[str] = None
+    resolution_feedback_url: Optional[str] = None
+    resolution_feedback_requested_at: Optional[datetime] = None
+    resolution_feedback_submitted_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

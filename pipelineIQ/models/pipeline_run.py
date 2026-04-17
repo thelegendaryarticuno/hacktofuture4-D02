@@ -44,6 +44,8 @@ class PipelineRun(Document):
     autofix_pr_url: Optional[str] = None
     autofix_execution_id: Optional[str] = None
     autofix_error: Optional[str] = None
+    autofix_feedback_url: Optional[str] = None
+    autofix_feedback_status: Optional[str] = None
     error_summary: Optional[str] = None
     diagnosis_provider: Optional[str] = None
     diagnosis_model: Optional[str] = None

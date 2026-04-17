@@ -10,6 +10,7 @@ from jose import JWTError, jwt
 
 from config import settings
 from models.autofix_execution import AutoFixExecution
+from models.autofix_feedback import AutoFixFeedback
 from models.autofix_memory import AutoFixMemory
 from models.pipeline_run import PipelineRun
 from models.user import User
@@ -105,6 +106,10 @@ def _report_url(token: str) -> str:
     return f"{settings.FRONTEND_URL}/autofix/report?token={token}"
 
 
+def _feedback_url(token: str) -> str:
+    return f"{settings.FRONTEND_URL}/autofix/feedback?token={token}"
+
+
 def create_autofix_report_token(execution_id: str) -> str:
     now = datetime.now(timezone.utc)
     payload = {
@@ -116,10 +121,28 @@ def create_autofix_report_token(execution_id: str) -> str:
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 
+def create_autofix_feedback_token(execution_id: str) -> str:
+    now = datetime.now(timezone.utc)
+    payload = {
+        "type": "autofix_feedback",
+        "execution_id": execution_id,
+        "iat": now,
+        "exp": now + timedelta(hours=settings.AUTOFIX_FEEDBACK_EXPIRY_HOURS),
+    }
+    return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+
+
 def decode_autofix_report_token(token: str) -> dict[str, Any]:
     payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
     if payload.get("type") != "autofix_report":
         raise JWTError("Invalid autofix report token")
+    return payload
+
+
+def decode_autofix_feedback_token(token: str) -> dict[str, Any]:
+    payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+    if payload.get("type") != "autofix_feedback":
+        raise JWTError("Invalid autofix feedback token")
     return payload
 
 
@@ -135,6 +158,15 @@ async def _memory_context(workspace: Workspace, repository_full_name: str, error
 async def _allow_automerge_from_memory(workspace: Workspace, repository_full_name: str, error_signature: str) -> bool:
     memories = await _memory_context(workspace, repository_full_name, error_signature)
     return any(memory.approved_for_auto_merge for memory in memories)
+
+
+async def _feedback_context(workspace: Workspace, repository_full_name: str, error_signature: str) -> list[AutoFixFeedback]:
+    return await AutoFixFeedback.find(
+        AutoFixFeedback.workspace_id == workspace.id,
+        AutoFixFeedback.repository_full_name == repository_full_name,
+        AutoFixFeedback.error_signature == error_signature,
+        AutoFixFeedback.status == "submitted",
+    ).sort(-AutoFixFeedback.updated_at).limit(5).to_list()
 
 
 async def _loop_guard(workspace: Workspace, pipeline_run: PipelineRun, error_signature: str) -> str | None:
@@ -172,6 +204,7 @@ def _autofix_prompt(
     risk_band: str,
     candidate_files: list[dict[str, Any]],
     memories: list[AutoFixMemory],
+    feedback_entries: list[AutoFixFeedback],
 ) -> str:
     diagnosis = pipeline_run.diagnosis_report_json or {}
     memory_lines = [
@@ -181,6 +214,15 @@ def _autofix_prompt(
             "note": memory.note,
         }
         for memory in memories
+    ]
+    feedback_lines = [
+        {
+            "outcome": feedback.outcome,
+            "automation_quality": feedback.automation_quality,
+            "should_auto_apply_similar": feedback.should_auto_apply_similar,
+            "notes": feedback.notes,
+        }
+        for feedback in feedback_entries
     ]
     payload = {
         "repository": pipeline_run.repository_full_name,
@@ -197,6 +239,7 @@ def _autofix_prompt(
             for item in candidate_files
         ],
         "past_reviewer_feedback": memory_lines,
+        "post_resolution_feedback": feedback_lines,
     }
     return json.dumps(payload, separators=(",", ":"))
 
@@ -229,6 +272,7 @@ async def generate_autofix_plan(
 ) -> dict[str, Any]:
     candidate_files = await _candidate_files(pipeline_run)
     memories = await _memory_context(workspace, pipeline_run.repository_full_name, error_signature)
+    feedback_entries = await _feedback_context(workspace, pipeline_run.repository_full_name, error_signature)
 
     try:
         response_text, _, _ = await call_with_fallback(
@@ -243,6 +287,7 @@ async def generate_autofix_plan(
                 risk_band=risk_band,
                 candidate_files=candidate_files,
                 memories=memories,
+                feedback_entries=feedback_entries,
             ),
             temperature=0.1,
             max_tokens=4000,
@@ -383,6 +428,76 @@ async def _notify_autofix_slack(
         logging.getLogger(__name__).error(f"Failed to send Slack: {exc}")
 
 
+async def _ensure_resolution_feedback_request(
+    *,
+    workspace: Workspace,
+    pipeline_run: PipelineRun,
+    execution: AutoFixExecution,
+    reviewer: User | None,
+) -> tuple[AutoFixFeedback, bool]:
+    existing = await AutoFixFeedback.find_one(AutoFixFeedback.execution_id == execution.id)
+    if existing is not None:
+        return existing, False
+
+    token = create_autofix_feedback_token(str(execution.id))
+    url = _feedback_url(token)
+    now = datetime.now(timezone.utc)
+    feedback = AutoFixFeedback(
+        workspace_id=workspace.id,
+        execution_id=execution.id,
+        pipeline_run_id=pipeline_run.id,
+        repository_full_name=pipeline_run.repository_full_name,
+        error_signature=execution.error_signature,
+        target_branch=execution.target_branch,
+        reviewer_username=reviewer.username if reviewer else None,
+        reviewer_github_id=reviewer.github_id if reviewer else None,
+        feedback_token=token,
+        feedback_url=url,
+        status="requested",
+        requested_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    await feedback.insert()
+
+    execution.resolution_feedback_status = "requested"
+    execution.resolution_feedback_url = url
+    execution.resolution_feedback_requested_at = now
+    execution.updated_at = now
+    await execution.save()
+
+    pipeline_run.autofix_feedback_status = "requested"
+    pipeline_run.autofix_feedback_url = url
+    pipeline_run.updated_at = now
+    await pipeline_run.save()
+    return feedback, True
+
+
+async def _notify_resolution_feedback_slack(
+    *,
+    workspace: Workspace,
+    pipeline_run: PipelineRun,
+    execution: AutoFixExecution,
+    feedback: AutoFixFeedback,
+) -> None:
+    mention = _slack_target(workspace)
+    lines = [
+        "PipelineIQ post-fix feedback requested",
+        mention,
+        f"Repository: {pipeline_run.repository_full_name}",
+        f"Workflow: {pipeline_run.workflow_name or 'workflow_run'}",
+        f"Branch: {execution.target_branch}",
+        f"PR: {execution.pr_url or 'n/a'}",
+        "The auto-fix has been merged. Please share how well it actually worked so PipelineIQ can learn from this case.",
+        f"Feedback form: {feedback.feedback_url}",
+    ]
+    text = "\n".join(line for line in lines if line)
+    try:
+        await post_slack_message(text=text)
+    except Exception as exc:
+        logging.getLogger(__name__).error(f"Failed to send Slack feedback request: {exc}")
+
+
 async def _create_fix_pr(
     *,
     workspace: Workspace,
@@ -497,6 +612,32 @@ async def store_feedback_memory(
     return memory
 
 
+async def request_resolution_feedback(
+    *,
+    workspace: Workspace,
+    pipeline_run: PipelineRun,
+    execution: AutoFixExecution,
+    reviewer: User | None,
+) -> AutoFixFeedback | None:
+    if execution.execution_status != "merged" or execution.mode == "auto_merge":
+        return None
+
+    feedback, created = await _ensure_resolution_feedback_request(
+        workspace=workspace,
+        pipeline_run=pipeline_run,
+        execution=execution,
+        reviewer=reviewer,
+    )
+    if created:
+        await _notify_resolution_feedback_slack(
+            workspace=workspace,
+            pipeline_run=pipeline_run,
+            execution=execution,
+            feedback=feedback,
+        )
+    return feedback
+
+
 async def execute_autofix_policy(
     *,
     workspace: Workspace,
@@ -509,6 +650,8 @@ async def execute_autofix_policy(
 
     pipeline_run.autofix_error = None
     pipeline_run.autofix_pr_url = None
+    pipeline_run.autofix_feedback_url = None
+    pipeline_run.autofix_feedback_status = None
 
     reviewer = await User.get(workspace.owner_id)
     error_signature = build_error_signature(pipeline_run)
@@ -627,6 +770,13 @@ async def execute_autofix_policy(
         ),
     )
 
+    await request_resolution_feedback(
+        workspace=workspace,
+        pipeline_run=pipeline_run,
+        execution=execution,
+        reviewer=reviewer,
+    )
+
     return execution
 
 
@@ -636,6 +786,14 @@ async def get_autofix_execution_by_token(token: str) -> AutoFixExecution:
     if execution is None:
         raise JWTError("Auto-fix report not found")
     return execution
+
+
+async def get_autofix_feedback_by_token(token: str) -> AutoFixFeedback:
+    payload = decode_autofix_feedback_token(token)
+    feedback = await AutoFixFeedback.find_one(AutoFixFeedback.feedback_token == token)
+    if feedback is None or str(feedback.execution_id) != str(payload["execution_id"]):
+        raise JWTError("Auto-fix feedback request not found")
+    return feedback
 
 
 async def handle_report_feedback(
@@ -718,6 +876,13 @@ async def handle_report_feedback(
             title="PipelineIQ approval decision received",
         )
 
+        await request_resolution_feedback(
+            workspace=workspace,
+            pipeline_run=pipeline_run,
+            execution=execution,
+            reviewer=reviewer,
+        )
+
         return {"status": execution.report_feedback_status, "pr_url": execution.pr_url}
 
     if normalized == "approve" and execution.mode == "report_only":
@@ -752,3 +917,78 @@ async def handle_report_feedback(
     pipeline_run.updated_at = datetime.now(timezone.utc)
     await pipeline_run.save()
     return {"status": execution.report_feedback_status, "pr_url": execution.pr_url}
+
+
+async def handle_resolution_feedback_submission(
+    *,
+    token: str,
+    outcome: str,
+    automation_quality: str,
+    should_auto_apply_similar: bool,
+    notes: str | None = None,
+) -> dict[str, Any]:
+    normalized_outcome = outcome.strip().lower()
+    normalized_quality = automation_quality.strip().lower()
+    allowed_outcomes = {"resolved", "partially_resolved", "not_resolved"}
+    allowed_qualities = {"excellent", "acceptable", "poor"}
+    if normalized_outcome not in allowed_outcomes:
+        raise JWTError("Outcome must be resolved, partially_resolved, or not_resolved")
+    if normalized_quality not in allowed_qualities:
+        raise JWTError("Automation quality must be excellent, acceptable, or poor")
+
+    feedback = await get_autofix_feedback_by_token(token)
+    execution = await AutoFixExecution.get(feedback.execution_id)
+    pipeline_run = await PipelineRun.get(feedback.pipeline_run_id)
+    workspace = await Workspace.get(feedback.workspace_id)
+    reviewer = await User.get(workspace.owner_id) if workspace else None
+    if execution is None or pipeline_run is None or workspace is None:
+        raise JWTError("Associated auto-fix context was not found")
+
+    now = datetime.now(timezone.utc)
+    feedback.status = "submitted"
+    feedback.outcome = normalized_outcome
+    feedback.automation_quality = normalized_quality
+    feedback.should_auto_apply_similar = should_auto_apply_similar
+    feedback.notes = notes
+    feedback.submitted_at = now
+    feedback.updated_at = now
+    await feedback.save()
+
+    execution.resolution_feedback_status = "submitted"
+    execution.resolution_feedback_submitted_at = now
+    execution.updated_at = now
+    await execution.save()
+
+    pipeline_run.autofix_feedback_status = "submitted"
+    pipeline_run.updated_at = now
+    await pipeline_run.save()
+
+    memory_note_parts = [
+        f"Outcome: {normalized_outcome}",
+        f"Quality: {normalized_quality}",
+        f"Reuse similar fix automatically: {'yes' if should_auto_apply_similar else 'no'}",
+    ]
+    if notes and notes.strip():
+        memory_note_parts.append(f"Engineer feedback: {notes.strip()}")
+    memory_note = " | ".join(memory_note_parts)
+    approved_for_auto_merge = (
+        normalized_outcome == "resolved"
+        and normalized_quality in {"excellent", "acceptable"}
+        and should_auto_apply_similar
+    )
+    memory_type = "resolution_feedback_positive" if approved_for_auto_merge else "resolution_feedback_negative"
+    await store_feedback_memory(
+        workspace=workspace,
+        pipeline_run=pipeline_run,
+        reviewer=reviewer,
+        error_signature=execution.error_signature,
+        memory_type=memory_type,
+        note=memory_note,
+        approved_for_auto_merge=approved_for_auto_merge,
+    )
+
+    return {
+        "status": "submitted",
+        "feedback_status": feedback.status,
+        "execution_status": execution.execution_status,
+    }

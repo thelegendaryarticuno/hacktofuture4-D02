@@ -12,7 +12,7 @@ api.interceptors.response.use(
   (res) => res,
   (err) => {
     const path = window.location.pathname || "/";
-    const isPublicPath = path === "/" || path.startsWith("/autofix/report");
+    const isPublicPath = path === "/" || path.startsWith("/autofix/report") || path.startsWith("/autofix/feedback");
     if (err.response?.status === 401 && !isPublicPath) {
       window.location.href = "/";
     }
