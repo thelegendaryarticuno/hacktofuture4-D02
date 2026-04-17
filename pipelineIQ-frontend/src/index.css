@@ -1363,6 +1363,19 @@ input, textarea {
   line-height: 1.5;
 }
 
+.autofix-report-page .auth-input {
+  width: 100%;
+  display: block;
+  box-sizing: border-box;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: rgba(2, 6, 23, 0.04);
+  color: var(--text-primary);
+  resize: vertical;
+}
+
 .inline-error {
   color: #ef4444;
   margin-top: 8px;

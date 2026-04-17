@@ -521,8 +521,8 @@ async def execute_autofix_policy(
         mode = "approval_pr"
         policy_note = "Risk score requires a PR and reviewer approval before merge."
     else:
-        mode = "report_only"
-        policy_note = "Risk score is above the approval threshold, so only a signed review report is produced."
+        mode = "approval_pr"
+        policy_note = "High-risk change: PR is created for explicit approval, and the on-call engineer is paged with a signed approval URL."
 
     fix_plan = await generate_autofix_plan(
         workspace=workspace,
@@ -620,7 +620,11 @@ async def execute_autofix_policy(
         execution=execution,
         fix_plan=fix_plan,
         include_report_url=mode == "approval_pr",
-        title="PipelineIQ auto-fix execution update",
+        title=(
+            "PipelineIQ high-risk approval required (paged)"
+            if risk_score > int(workspace.risk_profile.require_approval_above)
+            else "PipelineIQ auto-fix execution update"
+        ),
     )
 
     return execution
